@@ -11,7 +11,7 @@ database = config["database"]
 tables = config["tables"]
 
 try:
-    con = duckdb.connect(database)
+    con = duckdb.connect(database) #現状例外にならずに強制終了する
 except Exception as e:
     input("DuckDBを開けませんでした:", e)
     sys.exit(1)
@@ -27,7 +27,10 @@ def detect_pattern(str):
 
 def csv_to_db(file, table, filename, last_modded):
 
-    df = pd.read_csv(file, skiprows=table["skip"], parse_dates=table["parse_dates"])
+    df = pd.read_csv(file,
+        skiprows=table.get("skip_rows", []),
+        parse_dates=table.get("parse_dates", []),
+        encoding="utf-8-sig")
     #ファイル名の列を追加
     df.insert(0,"source", filename)
 
@@ -45,7 +48,7 @@ def csv_to_db(file, table, filename, last_modded):
         #ファイル登録
         con.execute("INSERT INTO files VALUES (?, ?)", [filename, complete])
         # テーブルがなければ作成（型は df から推論）
-        con.execute(f"CREATE TABLE IF NOT 24 {table_name} AS SELECT * FROM df LIMIT 0")
+        con.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df LIMIT 0")
         #テーブルにレコード追加
         con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
         print(f"{filename}を追加しました")
@@ -61,6 +64,8 @@ def csv_to_db(file, table, filename, last_modded):
 
 
 import argparse
+from pathlib import Path
+
 
 def main():
     parser = argparse.ArgumentParser(description="CSVファイルをDBに登録します")
@@ -72,25 +77,26 @@ def main():
     if files is None:
         input("ファイルを選択してください")
         return
+    
+    for filepath in map(Path, files):
+        match filepath.suffix:
+            case '.csv':
+                filename = filepath.name
+                table = detect_pattern(filename)
+                if table is not None:
+                    ts = os.path.getmtime(filepath)
+                    last_modded = datetime.datetime.fromtimestamp(ts)
+                    
+                    csv_to_db(filepath, table, filename, last_modded)
+            case '.zip':
+                pass
+            case _:
+                pass
 
-    for table_data in tables:
-        pattern = table_data["pattern"]
-        table = table_data["table"]
-        skip = table_data.get("skip_rows", [])
-        parse_dates = table_data.get("parse_dates", [])
-        print(parse_dates[0])
-
-        for file in fnmatch.filter(files, f"*{pattern}"):
-            #ファイル更新日時が23時58分以降のものはログが完了しているものとする
-            ts = os.path.getmtime(file)
-            time = datetime.datetime.fromtimestamp(ts).time()
-            complete = time >= datetime.time(23, 58)
-            
-            csv_to_db(file, table, skip, complete, parse_dates)
-
+    
     input("処理が終了しました。")
 
 
-#if __name__ == "__main__":
-#    main()
+if __name__ == "__main__":
+    main()
  
