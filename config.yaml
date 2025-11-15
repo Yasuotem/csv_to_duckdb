@@ -1,5 +1,5 @@
 # config.yaml
-database: "testdb.duckdb"
+database: "output/testdb.duckdb"
 tables:
   - pattern: "TBL01_*.csv"
     table_name: "TBL01"
