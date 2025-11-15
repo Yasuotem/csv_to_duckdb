@@ -13,12 +13,12 @@ tables = config["tables"]
 try:
     con = duckdb.connect(database)
 except Exception as e:
-    print("DuckDBを開けませんでした:", e)
+    input("DuckDBを開けませんでした:", e)
     sys.exit(1)
 
 
-def csv_to_db(filepath, table, skip, complete):
-    df = pd.read_csv(filepath, skiprows=skip)
+def csv_to_db(filepath, table, skip, complete, parse_dates):
+    df = pd.read_csv(filepath, skiprows=skip, parse_dates=parse_dates)
     #ファイル名の列を追加
     filename = os.path.basename(filepath)
     df.insert(0,"source", filename)
@@ -66,7 +66,9 @@ def main():
     for table_data in tables:
         pattern = table_data["pattern"]
         table = table_data["table"]
-        skip = table_data["skip_rows"]
+        skip = table_data.get("skip_rows", [])
+        parse_dates = table_data.get("parse_dates", [])
+        print(parse_dates[0])
 
         for file in fnmatch.filter(files, f"*{pattern}"):
             #ファイル更新日時が23時58分以降のものはログが完了しているものとする
@@ -74,7 +76,7 @@ def main():
             time = datetime.datetime.fromtimestamp(ts).time()
             complete = time >= datetime.time(23, 58)
             
-            csv_to_db(file, table, skip, complete)
+            csv_to_db(file, table, skip, complete, parse_dates)
 
     input("処理が終了しました。")
 
