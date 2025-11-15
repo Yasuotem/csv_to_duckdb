@@ -2,10 +2,10 @@
 database: "testdb.duckdb"
 tables:
   - pattern: "TBL01_*.csv"
-    table: "TBL01"
+    table_name: "TBL01"
     skip_rows: [1]  # 1行目だけスキップ
     parse_dates: [収集日時]
   - pattern: "TEST_*.csv"
-    table: "TEST"
+    table_name: "TEST"
     skip_rows: [1, 2]  # 1行目と2行目をスキップ
     parse_dates: [収集日時]

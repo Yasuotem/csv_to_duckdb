@@ -16,41 +16,51 @@ except Exception as e:
     input("DuckDBを開けませんでした:", e)
     sys.exit(1)
 
+import fnmatch
+import datetime
 
-def csv_to_db(filepath, table, skip, complete, parse_dates):
-    df = pd.read_csv(filepath, skiprows=skip, parse_dates=parse_dates)
+def detect_pattern(str):
+    for table in tables:
+        if fnmatch.fnmatch(str, table["pattern"]):
+            return table
+    return None
+
+def csv_to_db(file, table, filename, last_modded):
+
+    df = pd.read_csv(file, skiprows=table["skip"], parse_dates=table["parse_dates"])
     #ファイル名の列を追加
-    filename = os.path.basename(filepath)
     df.insert(0,"source", filename)
 
     #ファイル名管理テーブルの定義
     con.execute("""CREATE TABLE IF NOT EXISTS files (
                 source VARCHAR,
                 complete BOOL)""")
+    table_name = table["table_name"]
     #ファイルの登録データを探す
     exists = con.execute("SELECT complete FROM files WHERE source = ?", [filename]).fetchone()
     if exists is None: #ファイルが未登録の場合
+        #ファイル更新日時が23時58分以降のものはログが完了しているものとする
+        time = last_modded.time()
+        complete = time >= datetime.time(23, 58)
         #ファイル登録
         con.execute("INSERT INTO files VALUES (?, ?)", [filename, complete])
         # テーブルがなければ作成（型は df から推論）
-        con.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df LIMIT 0")
+        con.execute(f"CREATE TABLE IF NOT 24 {table_name} AS SELECT * FROM df LIMIT 0")
         #テーブルにレコード追加
-        con.execute(f"INSERT INTO {table} SELECT * FROM df")
+        con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
         print(f"{filename}を追加しました")
     else:
         is_complete = exists[0]
         if is_complete == False: #ファイルが登録されているが、完了していない場合
             #テーブル内にある同ファイルのデータを消して入れなおす
-            con.execute(f"DELETE FROM {table} WHERE source = ?", [filename])
-            con.execute(f"INSERT INTO {table} SELECT * FROM df")
+            con.execute(f"DELETE FROM {table_name} WHERE source = ?", [filename])
+            con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
             print(f"{filename}を更新しました") 
         elif is_complete == True: #ファイルが登録されていて完了している場合
             print(f"{filename}はDB内に存在しています")
 
 
 import argparse
-import fnmatch
-import datetime
 
 def main():
     parser = argparse.ArgumentParser(description="CSVファイルをDBに登録します")
@@ -81,6 +91,6 @@ def main():
     input("処理が終了しました。")
 
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
  
