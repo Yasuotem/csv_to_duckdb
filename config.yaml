@@ -1,0 +1,9 @@
+# config.yaml
+database: "testdb.duckdb"
+tables:
+  - pattern: "test_*.csv"
+    table: "test_data"
+    skip_rows: [1]  # 1行目だけスキップ
+  - pattern: "user_*.csv"
+    table: "user_data"
+    skip_rows: [1, 2]  # 1行目と2行目をスキップ
