@@ -20,6 +20,7 @@ except Exception as e:
 import fnmatch
 from datetime import datetime, time
 
+#yamlファイルからパターンの一致するtableを取得する
 def detect_pattern(str):
     for table in tables:
         if fnmatch.fnmatch(str, table["pattern"]):
@@ -27,12 +28,12 @@ def detect_pattern(str):
     return None
 
 def csv_to_db(file, table, filename, last_modded):
-
+    #csvのデータをdfに読み込む
     df = pd.read_csv(file,
         skiprows=table.get("skip_rows", []),
         parse_dates=table.get("parse_dates", []),
         encoding="utf-8-sig")
-    #ファイル名の列を追加
+    #ファイル名の列を先頭に追加
     df.insert(0,"source", filename)
 
     #ファイル更新日時が23時58分以降のものはログが完了しているものとする
@@ -47,12 +48,12 @@ def csv_to_db(file, table, filename, last_modded):
     #ファイルの登録データを探す
     exists = con.execute("SELECT complete FROM files WHERE source = ?", [filename]).fetchone()
     if exists is None: #ファイルが未登録の場合
-        #ファイル登録
-        con.execute("INSERT INTO files VALUES (?, ?)", [filename, complete])
         # テーブルがなければ作成（型は df から推論）
         con.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df LIMIT 0")
         #テーブルにレコード追加
         con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
+        #ファイル登録
+        con.execute("INSERT INTO files VALUES (?, ?)", [filename, complete])
         print(f"{filename}を追加しました")
     else:
         is_complete = exists[0]
@@ -73,18 +74,21 @@ import zipfile
 
 
 def main():
+    #パラメーター引数の設定
     parser = argparse.ArgumentParser(description="CSVファイルをDBに登録します")
     parser.add_argument("files", nargs="+", help="処理するCSVファイル")
  
     args = parser.parse_args()
     files = args.files
 
+    #ファイルをcsv/csvの入ったzipで分類して処理
     for filepath in map(Path, files):
         match filepath.suffix:
             case '.csv':
                 filename = filepath.name
                 table = detect_pattern(filename)
                 if table is not None:
+                    #最終更新日時をdatetimeで取得
                     ts = os.path.getmtime(filepath)
                     last_modded = datetime.fromtimestamp(ts)
                     
@@ -97,12 +101,12 @@ def main():
                         filename = path.name
                         table = detect_pattern(filename)
                         if table is not None:
+                            #最終更新日時をdatetimeで取得
                             last_modded = datetime(*info.date_time)
+
                             csv_to_db(z.open(info), table, filename, last_modded)
             case _:
                 pass
-
-    
     print("処理が終了しました。")
     input()
 
