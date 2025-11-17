@@ -2,14 +2,13 @@ import pandas as pd
 import duckdb
 import yaml
 import os
+import logging
 import fnmatch
 from datetime import datetime
 import argparse
 from pathlib import Path
 import zipfile
-from functools import partial
 from typing import TypedDict
-import dateutil
 
 # YAML設定の型定義
 class TableConfig(TypedDict, total=False):
@@ -17,7 +16,6 @@ class TableConfig(TypedDict, total=False):
     table_name: str                  # DuckDB のテーブル名
     skip_rows: list[int] | None      # スキップする行番号リスト (例: [1])
     parse_dates: list[str] | None    # 日付として解釈する列名リスト
-    log_completion_time: str
 
 class Config(TypedDict):
     database: str                    # DuckDB データベースファイル名
@@ -69,7 +67,7 @@ def csv_to_db(con, file, table: TableConfig, filename, last_modified, now):
                         WHERE source = ?""", [last_modified, now, filename])
             print(f"{filename}を更新しました") 
 
-        case (dt,) if dt >= last_modified: #ファイルが登録されていて完了している場合
+        case (dt,) if dt >= last_modified: #登録されているデータより古い場合
             print(f"{filename}はDB内に存在しています")
 
 #ファイルをcsv/csvの入ったzipで分類して処理
