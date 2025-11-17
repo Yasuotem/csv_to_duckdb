@@ -2,26 +2,37 @@ import pandas as pd
 import duckdb
 import yaml
 import os
-import sys
 import fnmatch
 from datetime import datetime, time
 import argparse
 from pathlib import Path
 import zipfile
+from dataclasses import dataclass
+from functools import partial
+from typing import TypedDict
+import dateutil
 
-# mainで初期化
-con = None # duckdbの接続
-config = None #設定のYAMLデータ
+# YAML設定の型定義
+class TableConfig(TypedDict, total=False):
+    pattern: str                     # ファイル名パターン (例: "*.csv")
+    table_name: str                  # DuckDB のテーブル名
+    skip_rows: list[int] | None      # スキップする行番号リスト (例: [1])
+    parse_dates: list[str] | None    # 日付として解釈する列名リスト
+    log_completion_time: str
 
-#yamlファイルからパターンの一致するtableを取得する
-def detect_pattern(str):
-    for table in config["tables"]:
-        if fnmatch.fnmatch(str, table["pattern"]):
-            return table
-    return None
+class Config(TypedDict):
+    database: str                    # DuckDB データベースファイル名
+    tables: list[TableConfig]        # 複数テーブルの設定リスト
+
+# Options dataclass
+@dataclass(frozen=True)
+class Options:
+    con: duckdb.DuckDBPyConnection
+    config: Config
+    files: list[Path]
 
 #CSVをdfに変換してテーブルに追加, filesテーブルにファイル名を登録
-def csv_to_db(file, table, filename, last_modded):
+def csv_to_db(con, file, table: TableConfig, filename, last_modded):
     #csvのデータをdfに読み込む
     df = pd.read_csv(file,
         skiprows=table.get("skip_rows", []),
@@ -30,9 +41,8 @@ def csv_to_db(file, table, filename, last_modded):
     #ファイル名の列を先頭に追加
     df.insert(0,"source", filename)
 
-    #ファイル更新日時が23時58分以降のものはログが完了しているものとする
-    t = last_modded.time()
-    complete = t >= time(23, 58)
+    #ファイル更新日時からログが完了しているか判別する
+    complete = last_modded.time() >= dateutil.parser.parse(table["log_completion_time"]).time()
 
     #ファイル名管理テーブルの定義
     con.execute("""CREATE TABLE IF NOT EXISTS files (
@@ -62,8 +72,15 @@ def csv_to_db(file, table, filename, last_modded):
             print(f"{filename}はDB内に存在しています")
 
 #ファイルをcsv/csvの入ったzipで分類して処理
-def read_files(files):
-    for filepath in files:
+def read_files(opt: Options):
+    #yamlファイルからパターンの一致するtableを取得する
+    def detect_pattern(str):
+        for table in opt.config["tables"]:
+            if fnmatch.fnmatch(str, table["pattern"]):
+                return table
+        return None
+
+    for filepath in opt.files:
         match filepath.suffix:
             case '.csv':
                 filename = filepath.name
@@ -73,7 +90,7 @@ def read_files(files):
                     ts = os.path.getmtime(filepath)
                     last_modded = datetime.fromtimestamp(ts)
                     
-                    csv_to_db(filepath, table, filename, last_modded)
+                    csv_to_db(opt.con, filepath, table, filename, last_modded)
             case '.zip':
                 with zipfile.ZipFile(filepath) as z:
                     print(filepath.name)
@@ -86,14 +103,11 @@ def read_files(files):
                                 #最終更新日時をdatetimeで取得
                                 last_modded = datetime(*info.date_time)
 
-                                csv_to_db(z.open(info), table, filename, last_modded)
+                                csv_to_db(opt.con, z.open(info), table, filename, last_modded)
             case _:
                 pass
 
 def main():
-    global con
-    global config
-    #パラメーター引数の設定
     parser = argparse.ArgumentParser(description="CSVファイルをDBに登録します")
     parser.add_argument("files", nargs="+", type=Path, help="処理するCSVファイルまたはCSVファイルのZIPアーカイブ")
     parser.add_argument("-C", "--config", type=Path, default="config.yaml", help="設定のYAMLファイルの指定")
@@ -108,7 +122,7 @@ def main():
         print("YAMLファイルを開けませんでした:", e)
         input()
         return
-
+    # duckdbに接続
     try:
         con = duckdb.connect(config["database"]) 
     except Exception as e:
@@ -116,8 +130,9 @@ def main():
         input()
         return
     
-    read_files(args.files)
-
+    opt = Options(con, config, args.files)
+    read_files(opt)
+    
     print("処理が終了しました。")
     input()
     
