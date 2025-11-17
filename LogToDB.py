@@ -23,8 +23,15 @@ class Config(TypedDict):
     database: str                    # DuckDB データベースファイル名
     tables: list[TableConfig]        # 複数テーブルの設定リスト
 
+#ファイル名管理テーブルの定義
+TABLE_FILES = """
+    CREATE TABLE IF NOT EXISTS files (
+        source VARCHAR,
+        last_modified TIMESTAMP,
+        inserted_at TIMESTAMP)"""
+
 #CSVをdfに変換してテーブルに追加, filesテーブルにファイル名を登録
-def csv_to_db(con, file, table: TableConfig, filename, last_modded):
+def csv_to_db(con, file, table: TableConfig, filename, last_modified, now):
     #csvのデータをdfに読み込む
     df = pd.read_csv(file,
         skiprows=table.get("skip_rows", []),
@@ -33,32 +40,36 @@ def csv_to_db(con, file, table: TableConfig, filename, last_modded):
     #ファイル名の列を先頭に追加
     df.insert(0,"source", filename)
 
-    #ファイル更新日時からログが完了しているか判別する
-    complete = last_modded.time() >= dateutil.parser.parse(table["log_completion_time"]).time()
-
     table_name = table["table_name"]
+    default_ts = datetime(1970, 1, 1) #DBのタイムスタンプ初期値
     #ファイルの登録データを探す
-    match con.execute("SELECT complete FROM files WHERE source = ?", [filename]).fetchone():
+    match con.execute("SELECT last_modified FROM files WHERE source = ?", [filename]).fetchone():
         case None: #ファイルが未登録の場合
             # テーブルがなければ作成（型は df から推論）
             con.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM df LIMIT 0")
             #ファイル登録
-            con.execute("INSERT INTO files VALUES (?, FALSE)", [filename])
+            con.execute("INSERT INTO files VALUES (?, ?, ?)", [filename, last_modified, default_ts])
             #テーブルにレコード追加
             con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
             #ファイル登録データを更新する
-            con.execute("UPDATE files SET complete = ? WHERE source = ?", [complete, filename])
+            con.execute("""UPDATE files
+                        SET last_modified = ?,
+                            inserted_at = ?
+                        WHERE source = ?""", [last_modified, now, filename])
             print(f"{filename}を追加しました")
 
-        case (False,): # ファイルが登録されているが未完了の場合
+        case (dt,) if dt < last_modified: # 登録されている更新日時より新しくなっている場合
             #テーブル内にある同ファイルのデータを消して入れなおす
             con.execute(f"DELETE FROM {table_name} WHERE source = ?", [filename])
             con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
             #ファイル登録データを更新する
-            con.execute("UPDATE files SET complete = ? WHERE source = ?", [complete, filename])
+            con.execute("""UPDATE files
+                        SET last_modified = ?,
+                            inserted_at = ?
+                        WHERE source = ?""", [last_modified, now, filename])
             print(f"{filename}を更新しました") 
-            
-        case (True,): #ファイルが登録されていて完了している場合
+
+        case (dt,) if dt >= last_modified: #ファイルが登録されていて完了している場合
             print(f"{filename}はDB内に存在しています")
 
 #ファイルをcsv/csvの入ったzipで分類して処理
@@ -70,6 +81,8 @@ def read_files(con, config, files):
                 return table
         return None
     
+    now = datetime.now()
+
     for filepath in files:
         match filepath.suffix:
             case '.csv':
@@ -80,7 +93,7 @@ def read_files(con, config, files):
                     ts = os.path.getmtime(filepath)
                     last_modded = datetime.fromtimestamp(ts)
                     
-                    csv_to_db(con, filepath, table, filename, last_modded)
+                    csv_to_db(con, filepath, table, filename, last_modded, now)
             case '.zip':
                 with zipfile.ZipFile(filepath) as z:
                     print(filepath.name)
@@ -93,7 +106,7 @@ def read_files(con, config, files):
                                 #最終更新日時をdatetimeで取得
                                 last_modded = datetime(*info.date_time)
 
-                                csv_to_db(con, z.open(info), table, filename, last_modded)
+                                csv_to_db(con, z.open(info), table, filename, last_modded, now)
             case _:
                 pass
 
@@ -120,10 +133,7 @@ def main():
         input()
         return
     
-    #ファイル名管理テーブルの定義
-    con.execute("""CREATE TABLE IF NOT EXISTS files (
-                source VARCHAR,
-                complete BOOL)""")
+    con.execute(TABLE_FILES)
   
     read_files(con, config, args.files)
     
