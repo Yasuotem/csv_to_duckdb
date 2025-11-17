@@ -17,20 +17,20 @@
 スクリプトの実行にはPython 3.10以上が必要です
 
 
-
 ## 📦 インストール
-```bash
-git clone https://github.com/Yasuotem/csv_to_duckdb.git
-cd csv_to_duckdb
-pip install -r requirements.txt
-```
-もしくは
 1. https://github.com/Yasuotem/csv_to_duckdb/archive/refs/heads/main.zip
 からダウンロードして任意の場所に展開して下さい
 2. 展開先のフォルダで右クリックメニューから「ターミナルで開く」を選択し、以下のコマンドを実行してください
 ```bash
 pip install -r requirements.txt
 ```
+gitを使用する場合
+```bash
+git clone https://github.com/Yasuotem/csv_to_duckdb.git
+cd csv_to_duckdb
+pip install -r requirements.txt
+```
+
 
 
 
@@ -40,8 +40,8 @@ pip install -r requirements.txt
 database: "output/testdb.duckdb" # 出力するduckdbファイル名
 tables:
   - pattern: "TBL01_*.csv" # csvファイル名のパターン
-    table_name: "TBL01" # データベース内のデーブル名を指定する
-    skip_rows: [1]  # スキップしたい行を指定する。最初の行は0。3行目までスキップしたいなら[0, 1, 2]のようにする。省略可
+    table_name: "TBL01"    # データベース内のデーブル名を指定する
+    skip_rows: [1]         # スキップしたい行を指定する。最初の行は0。3行目までスキップしたいなら[0, 1, 2]のようにする。省略可
     parse_dates: [収集日時] # 日時として記録したい列の列名を指定する。省略可
   - pattern: "TEST_*.csv" 
     table_name: "TEST"
@@ -49,14 +49,16 @@ tables:
     parse_dates: [収集日時]
 ```
 
-2. 実行例
+2. 実行例  
+エクスプローラーでload_csv_to_duckdb.pyのアイコン上にロードしたいCSV/ZIPファイルをドラッグ＆ドロップ  
+もしくはコマンドラインで
 ```bash
-python ingest.py --config config.yaml
+python load_csv_to_duck.py --config config.yaml TBL01_20250101.csv TBL01_202501022.csv
 ```
 
 3. DuckDB でのクエリ例
 ```duckdb
-SELECT COUNT(*) FROM orders;
-SELECT DISTINCT source_file FROM orders;
+SELECT * FROM tbl01
+SELECT * FROM files
 ```
 
