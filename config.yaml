@@ -5,9 +5,7 @@ tables:
     table_name: "TBL01"
     skip_rows: [1]  # 1行目だけスキップ
     parse_dates: [収集日時]
-    log_completion_time: "00:00" # ログが完了したとみなすファイルの更新時間
   - pattern: "TEST_*.csv"
     table_name: "TEST"
     skip_rows: [1, 2]  # 1行目と2行目をスキップ
     parse_dates: [収集日時]
-    log_completion_time: "23:59"
