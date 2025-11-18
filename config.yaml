@@ -5,7 +5,9 @@ tables:
     table_name: "TBL01"
     skip_rows: [1]  # 1行目だけスキップ
     parse_dates: [収集日時]
+    enencoding: "cp932"
   - pattern: "TEST_*.csv"
     table_name: "TEST"
     skip_rows: [1, 2]  # 1行目と2行目をスキップ
     parse_dates: [収集日時]
+    enencoding: "utf-8"

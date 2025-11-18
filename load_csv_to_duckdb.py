@@ -16,6 +16,7 @@ class TableConfig(TypedDict, total=False):
     table_name: str                  # DuckDB のテーブル名
     skip_rows: list[int] | None      # スキップする行番号リスト (例: [1])
     parse_dates: list[str] | None    # 日付として解釈する列名リスト
+    encoding: str | None             # エンコードを指定
 
 class Config(TypedDict):
     database: str                    # DuckDB データベースファイル名
@@ -34,7 +35,7 @@ def csv_to_db(con, file, table: TableConfig, filename, last_modified, now):
     df = pd.read_csv(file,
         skiprows=table.get("skip_rows", []),
         parse_dates=table.get("parse_dates", []),
-        encoding="utf-8-sig")
+        encoding=table.get("encoding", "utf-8-sig"))
     #ファイル名の列を先頭に追加
     df.insert(0,"source", filename)
 
